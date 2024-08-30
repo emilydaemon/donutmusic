@@ -4,6 +4,7 @@
 #include <wiiuse/wpad.h>
 #include <aesndlib.h>
 #include <gcmodplay.h>
+#include <fat.h>
 
 // include generated header
 #include "donut_mod.h"
@@ -51,6 +52,12 @@ int main(int argc, char **argv) {
 	VIDEO_WaitVSync();
 	if(rmode->viTVMode&VI_NON_INTERLACE) VIDEO_WaitVSync();
 
+	// Initialise SD card
+
+	if ( !fatInitDefault() ) {
+		printf("Unable to initialise FAT filesystem, exiting");
+		exit(0);
+	}
 
 	// The console understands VT terminal escape codes
 	// This positions the cursor on row 2, column 0
@@ -58,13 +65,13 @@ int main(int argc, char **argv) {
 	// e.g. printf ("\x1b[%d;%dH", row, column );
 	printf("\x1b[2;0H");
 
-
-	printf("hell yeah wii donut music\npress A to exit");
-
 	MODPlay_Init(&play);
 	MODPlay_SetMOD(&play,donut_mod);
-	MODPlay_SetVolume(&play,63,63);
 	MODPlay_Start(&play);
+
+	printf("Now playing: %s", (char *) &play.mod.name);
+
+	printf("\nPress A to exit");
 
 	while(1) {
 
@@ -75,8 +82,48 @@ int main(int argc, char **argv) {
 		// this is a "one shot" state which will not fire again until the button has been released
 		u32 pressed = WPAD_ButtonsDown(0);
 
+		if ( pressed & WPAD_BUTTON_RIGHT ) {
+			printf("\e[1;1H\e[2J");
+			printf("\x1b[2;0H");
+
+			long mod_size;
+			char* buffer;
+			size_t result;
+
+			FILE *f = fopen("/music/loop.mod", "rb");
+
+			if (f == NULL) {
+				fclose(f);
+			} else {
+				fseek(f, 0, SEEK_END);
+				mod_size = ftell(f);
+				rewind(f);
+				// Allocate memory to contain the whole file:
+				buffer = (char*) malloc(sizeof(char)*mod_size);
+				if (buffer == NULL) {
+					perror("Memory error\n");
+				}
+			}
+			// Copy the file into the buffer:
+			result = fread(buffer, 1, mod_size,f);
+			if (result != mod_size) {
+				perror("Reading error\n");
+			}
+			fclose(f);
+			
+			MODPlay_SetMOD(&play,buffer);
+			MODPlay_Start(&play);
+
+			printf("Now playing: %s\n", (char *) &play.mod.name);
+
+			printf("Press A to exit");
+		}
+
 		// We return to the launcher application via exit
-		if ( pressed & WPAD_BUTTON_A ) exit(0);
+		if ( pressed & WPAD_BUTTON_A ) {
+			MODPlay_Stop(&play);
+			exit(0);
+		}
 
 		// Wait for the next frame
 		VIDEO_WaitVSync();
