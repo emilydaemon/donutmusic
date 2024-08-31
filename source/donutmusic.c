@@ -13,6 +13,55 @@ static void *xfb = NULL;
 static GXRModeObj *rmode = NULL;
 static MODPlay play;
 
+void draw_info(MODPlay *mod) {
+	printf("\e[1;1H\e[2J");
+	printf("\x1b[2;0H");
+
+	if (mod->paused) {
+		printf(" Paused \xBA ");
+	} else if (mod->playing) {
+		printf("Playing \x10 ");
+	} else {
+		printf("Stopped \xFE ");
+	}
+
+	printf("\"%s\" ", mod->mod.name);
+	printf("(%s)", (mod->mod.channels == 1) ? "Mono" : "Stereo");
+	printf("\n");
+}
+
+MODPlay load_mod(char *filepath) {
+	MODPlay mod;
+	long mod_size;
+	char* buffer;
+	size_t result;
+
+	FILE *f = fopen(filepath, "rb");
+
+	if (f == NULL) {
+		fclose(f);
+	} else {
+		fseek(f, 0, SEEK_END);
+		mod_size = ftell(f);
+		rewind(f);
+		// Allocate memory to contain the whole file:
+		buffer = (char*) malloc(sizeof(char)*mod_size);
+		if (buffer == NULL) {
+			perror("Memory error\n");
+		}
+	}
+	// Copy the file into the buffer:
+	result = fread(buffer, 1, mod_size,f);
+	if (result != mod_size) {
+		perror("Reading error\n");
+	}
+	fclose(f);
+
+	MODPlay_SetMOD(&mod,buffer);
+
+	return mod;
+}
+
 //---------------------------------------------------------------------------------
 int main(int argc, char **argv) {
 //---------------------------------------------------------------------------------
@@ -74,7 +123,6 @@ int main(int argc, char **argv) {
 	printf("\nPress A to exit");
 
 	while(1) {
-
 		// Call WPAD_ScanPads each loop, this reads the latest controller states
 		WPAD_ScanPads();
 
@@ -82,45 +130,16 @@ int main(int argc, char **argv) {
 		// this is a "one shot" state which will not fire again until the button has been released
 		u32 pressed = WPAD_ButtonsDown(0);
 
+		draw_info(&play);
+		printf("Press HOME to exit\n");
+
 		if ( pressed & WPAD_BUTTON_RIGHT ) {
-			printf("\e[1;1H\e[2J");
-			printf("\x1b[2;0H");
-
-			long mod_size;
-			char* buffer;
-			size_t result;
-
-			FILE *f = fopen("/music/loop.mod", "rb");
-
-			if (f == NULL) {
-				fclose(f);
-			} else {
-				fseek(f, 0, SEEK_END);
-				mod_size = ftell(f);
-				rewind(f);
-				// Allocate memory to contain the whole file:
-				buffer = (char*) malloc(sizeof(char)*mod_size);
-				if (buffer == NULL) {
-					perror("Memory error\n");
-				}
-			}
-			// Copy the file into the buffer:
-			result = fread(buffer, 1, mod_size,f);
-			if (result != mod_size) {
-				perror("Reading error\n");
-			}
-			fclose(f);
-			
-			MODPlay_SetMOD(&play,buffer);
+			play = load_mod("/music/song.mod");
 			MODPlay_Start(&play);
-
-			printf("Now playing: %s\n", (char *) &play.mod.name);
-
-			printf("Press A to exit");
 		}
 
 		// We return to the launcher application via exit
-		if ( pressed & WPAD_BUTTON_A ) {
+		if ( pressed & WPAD_BUTTON_HOME ) {
 			MODPlay_Stop(&play);
 			exit(0);
 		}
